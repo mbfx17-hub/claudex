@@ -16,7 +16,7 @@ Read this before installing claudex. Be especially clear about what claudex DOES
 ### Review mode (v1, read-only)
 
 - Same state file artifacts as plan mode
-- **Creates and writes to `reviews/review-<id>.md`** (Codex findings)
+- **Creates and writes to `reviews/review-<id>.md`** (FCC Codex findings)
 - **Creates and writes to `reviews/proposed-fixes-<id>.md`** (Claude's interpretation, in unified diff format)
 - Does NOT apply any patches. Does NOT edit any other code in your project.
 
@@ -31,7 +31,7 @@ Read this before installing claudex. Be especially clear about what claudex DOES
 - Does NOT edit any user code in review mode (v1)
 - Does NOT delete any of your files
 - Does NOT push to git, branch, commit, or revert any of your work
-- Does NOT call out to any external service except the Codex CLI (which uses your existing ChatGPT auth)
+- Does NOT call out to any external service except the FCC Codex CLI (which uses your FCC account auth)
 - Does NOT collect telemetry or send any data anywhere
 
 ## Files claudex touches (complete list)
@@ -41,7 +41,7 @@ Read this before installing claudex. Be especially clear about what claudex DOES
 .claude/claudex/<review_id>.state   (per-loop state)
 .claude/claudex/<review_id>.lock    (per-loop lockfile)
 .claude/claudex/<review_id>-runner.sh    (per-loop runner)
-.claude/claudex/<review_id>-prompt.txt   (per-loop Codex prompt)
+.claude/claudex/<review_id>-prompt.txt   (per-loop FCC Codex prompt)
 .claude/claudex/log                 (append-only log)
 PLAN.md                             (plan mode only, in project root)
 reviews/review-<id>.md              (review mode only)
@@ -68,13 +68,13 @@ reviews/proposed-fixes-*.md
 
 ## Token cost
 
-Claudex uses Codex via the Codex CLI, which runs against your ChatGPT subscription. Costs are billed by ChatGPT, not by claudex.
+Claudex uses FCC Codex via the FCC Codex CLI, which runs against your FCC subscription. Costs are billed by FCC, not by claudex.
 
-Each plan-mode round is one full Codex review of `PLAN.md`. In practice that's **~25–30k Codex tokens per round**, so the default 3 rounds is **~75–90k tokens per `/claudex:plan`**. A `--rounds 5` run is ~125–150k. Each review-mode invocation is one Codex review (~25–40k tokens depending on diff size).
+Each plan-mode round is one full FCC Codex review of `PLAN.md`. In practice that's **~25–30k FCC Codex tokens per round**, so the default 3 rounds is **~75–90k tokens per `/claudex:plan`**. A `--rounds 5` run is ~125–150k. Each review-mode invocation is one FCC Codex review (~25–40k tokens depending on diff size).
 
-If your ChatGPT plan has usage limits, monitor them. Claudex cannot enforce limits or stop on cost. That is between you and OpenAI. Practical guidance:
+If your FCC plan has usage limits, monitor them. Claudex cannot enforce limits or stop on cost. That is between you and FCC. Practical guidance:
 
-- **Plus / Team:** `--rounds 3` (default) is fine for most plans. Avoid running multiple `/claudex:plan` back-to-back without a break.
+- **Standard / Team:** `--rounds 3` (default) is fine for most plans. Avoid running multiple `/claudex:plan` back-to-back without a break.
 - **Pro / Enterprise:** `--rounds 5–7` is comfortable for high-stakes designs.
 - **First time on a topic:** consider `--rounds 2` while you confirm the loop is doing what you want.
 
@@ -86,7 +86,7 @@ The plugin is designed to fail open. Specifically:
 - If a state file is corrupted → hook removes it on next fire and allows exit
 - If two `/claudex` are launched at once → the second is refused with a clear message
 - If you Ctrl-C mid-loop → the lockfile becomes stale → next `/claudex` invocation cleans it up
-- If `codex` CLI is missing → the runner script reports an error, the hook still allows exit
+- If `fcc-codex` CLI is missing → the runner script reports an error, the hook still allows exit
 
 Worst case: you might end up with a stale state file under `.claude/claudex/` that doesn't get auto-swept. To clean: run `/claudex:rollback`.
 

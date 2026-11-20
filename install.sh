@@ -5,8 +5,8 @@
 # Claude Code. Safe to re-run; it just re-checks each step.
 #
 #   1. Node.js 18+
-#   2. Codex CLI (npm install -g @openai/codex)
-#   3. Codex auth (codex login)
+#   2. FCC Codex CLI
+#   3. FCC Codex auth (configured via FCC)
 #   4. The official Codex plugin for Claude Code (recommended companion)
 #   5. claudex itself (this plugin)
 #   6. Run platform-validation tests
@@ -16,7 +16,7 @@
 
 set +e
 
-PLUGIN_ROOT="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "$(dirname "$0")/plugins/claudex" && pwd)"
 
 GREEN='\033[32m'
 RED='\033[31m'
@@ -50,36 +50,26 @@ else
 fi
 
 # ─────────────────────────────────────────────
-hdr "2. Codex CLI"
+hdr "2. FCC Codex CLI"
 # ─────────────────────────────────────────────
-if ! command -v codex >/dev/null 2>&1; then
-  warn "codex CLI not found"
-  note "Installing @openai/codex via npm..."
-  if npm install -g @openai/codex 2>&1 | tail -5; then
-    if command -v codex >/dev/null 2>&1; then
-      ok "codex CLI installed: $(codex --version 2>/dev/null | head -1)"
-    else
-      fail "npm install ran but codex still not on PATH"
-      failures=$((failures+1))
-    fi
-  else
-    fail "npm install -g @openai/codex failed"
-    failures=$((failures+1))
-  fi
+if ! command -v fcc-codex >/dev/null 2>&1; then
+  warn "fcc-codex CLI not found"
+  note "Install FCC Codex CLI from your FCC portal or package manager."
+  note "This is NOT the same as 'npm install -g @openai/codex' (which installs raw OpenAI Codex)."
+  failures=$((failures+1))
 else
-  ok "codex CLI: $(codex --version 2>/dev/null | head -1)"
+  ok "fcc-codex CLI: $(fcc-codex --version 2>/dev/null | head -1)"
 fi
 
 # ─────────────────────────────────────────────
-hdr "3. Codex authentication"
+hdr "3. FCC Codex authentication"
 # ─────────────────────────────────────────────
-# We can't reliably check auth without invoking a real codex command which
-# costs tokens. Just print a hint.
-if command -v codex >/dev/null 2>&1; then
-  note "Run this if you see auth errors during a /claudex loop:"
-  note "  codex login"
-  note "(Opens a browser. Sign in with your ChatGPT account. ChatGPT Plus or higher required.)"
-  ok "codex CLI is callable; auth not verified by this script"
+# FCC Codex uses FCC credentials, not ChatGPT login.
+# We can't reliably check auth without invoking a real fcc-codex command.
+if command -v fcc-codex >/dev/null 2>&1; then
+  note "Ensure your FCC Codex CLI is configured with valid FCC credentials."
+  note "This is different from 'codex login' (which is for OpenAI Codex)."
+  ok "fcc-codex CLI is callable; auth not verified by this script"
 fi
 
 # ─────────────────────────────────────────────
@@ -107,7 +97,7 @@ note "  /plugin install codex@openai-codex"
 note "  /reload-plugins"
 note "  /codex:setup"
 note ""
-note "claudex will work without it (we call codex CLI directly), but the"
+note "claudex will work without it (we call fcc-codex CLI directly), but the"
 note "official plugin is what most viewers of the Dynamic Duo video have."
 
 # ─────────────────────────────────────────────

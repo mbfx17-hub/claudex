@@ -1,5 +1,5 @@
 ---
-description: Preflight diagnostic for claudex. Verifies bash, codex CLI, state directory, plugin file integrity, and hook fail-open. Run after install or when something feels off.
+description: Preflight diagnostic for claudex. Verifies bash, fcc-codex CLI, state directory, plugin file integrity, and hook fail-open. Run after install or when something feels off.
 allowed-tools: Bash
 ---
 

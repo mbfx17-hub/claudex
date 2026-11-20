@@ -1,5 +1,5 @@
 ---
-description: Run an autonomous plan-and-review loop. Claude drafts PLAN.md, Codex grills it adversarially, Claude revises until LGTM or N rounds.
+description: Run an autonomous plan-and-review loop. Claude drafts PLAN.md, FCC Codex grills it adversarially, Claude revises until LGTM or N rounds.
 argument-hint: '[--rounds N] [--from-draft] [--skip-interview] <feature description>'
 allowed-tools: Bash, Read, Write, Edit, AskUserQuestion
 ---
@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write, Edit, AskUserQuestion
 
 User argument: $ARGUMENTS
 
-You are running the claudex plan-mode autonomous loop. The user wants you to draft a plan, hand it to Codex for adversarial review, revise based on findings, and loop until Codex has nothing material left to flag (or until the round budget is exhausted).
+You are running the claudex plan-mode autonomous loop. The user wants you to draft a plan, hand it to FCC Codex for adversarial review, revise based on findings, and loop until FCC Codex has nothing material left to flag (or until the round budget is exhausted).
 
 ## Optional flags
 
@@ -32,7 +32,7 @@ Wait for their reply, then re-invoke `/claudex:plan <their answer>`. Do not proc
 
 ### 2. Offer the topic-sharpening interview
 
-If $ARGUMENTS does NOT contain `--skip-interview`, use the AskUserQuestion tool to offer the user a quick interview before launching the loop. The interview lets the user front-load constraints and worries that would otherwise come out only when Codex flags them on round 2 or 3, a much cheaper signal capture.
+If $ARGUMENTS does NOT contain `--skip-interview`, use the AskUserQuestion tool to offer the user a quick interview before launching the loop. The interview lets the user front-load constraints and worries that would otherwise come out only when FCC Codex flags them on round 2 or 3, a much cheaper signal capture.
 
 Use this exact AskUserQuestion call:
 
@@ -40,7 +40,7 @@ Use this exact AskUserQuestion call:
 - **Header:** "Interview"
 - **Options:**
   1. Label: "Interview me first (Recommended)", Description: "I'll ask 3 quick questions about scope, constraints, and edge cases you're worried about. Then I launch the loop with a sharper topic. Costs ~30 seconds, saves a round of grilling."
-  2. Label: "Just launch the loop", Description: "Skip the interview and start drafting PLAN.md from the topic as written. Faster, but Codex may surface basic gaps you could have answered up front."
+  2. Label: "Just launch the loop", Description: "Skip the interview and start drafting PLAN.md from the topic as written. Faster, but FCC Codex may surface basic gaps you could have answered up front."
 
 If the user picks "Just launch the loop", skip to step 4.
 

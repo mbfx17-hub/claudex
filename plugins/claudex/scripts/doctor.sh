@@ -4,7 +4,7 @@
 # Verifies that everything claudex needs is wired up correctly:
 #   - bash version
 #   - python3 (for JSON escape; sed fallback exists but python3 is preferred)
-#   - codex CLI installed and responding
+#   - fcc-codex CLI installed and responding
 #   - .claude/claudex writable
 #   - plugin file integrity (every expected script + prompt template present)
 #   - hook fail-open sanity check
@@ -73,12 +73,12 @@ BASH_MAJOR="${BASH_VERSINFO[0]:-0}"
 warn_check "bash 4+ (got $BASH_VERSION; bash 3.x works but 4+ recommended)" \
   test "$BASH_MAJOR" -ge 4
 
-section "Codex CLI"
-check "codex in PATH" command -v codex
-if command -v codex >/dev/null 2>&1; then
-  CODEX_VER=$(codex --version 2>/dev/null | head -1)
-  if [ -n "$CODEX_VER" ]; then
-    printf '  %s•%s codex version: %s\n' "$C_DIM" "$C_RESET" "$CODEX_VER"
+section "FCC Codex CLI"
+check "fcc-codex in PATH" command -v fcc-codex
+if command -v fcc-codex >/dev/null 2>&1; then
+  FCC_CODEX_VER=$(fcc-codex --version 2>/dev/null | head -1)
+  if [ -n "$FCC_CODEX_VER" ]; then
+    printf '  %s•%s fcc-codex version: %s\n' "$C_DIM" "$C_RESET" "$FCC_CODEX_VER"
   fi
 fi
 

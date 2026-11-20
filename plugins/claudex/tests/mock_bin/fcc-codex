@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Mock fcc-codex for synthetic testing.
+
+if [ "$1" = "--version" ]; then
+  echo "fcc-codex 0.171.0 (mock)"
+  exit 0
+fi
+
+PROMPT=$(cat)
+
+if echo "$PROMPT" | grep -q "code review of the current git diff"; then
+  cat <<FINDOUT
+=== FINDINGS ===
+
+# Review findings
+
+## High
+- SQL injection risk in user input handling (use parameterized queries)
+
+## Medium
+- Missing error handling on external API call (add retry with backoff)
+
+## Low
+- Inconsistent naming convention in new functions
+
+=== PROPOSED FIXES ===
+
+--- a/src/api/links.ts
++++ b/src/api/links.ts
+@@ -10,7 +10,7 @@ export async function createLink(req, res) {
+   const { url, expiresAt } = req.body;
+-  const query = \`INSERT INTO links (url, expires_at) VALUES ('\${url}', '\${expiresAt}')\`;
++  const query = 'INSERT INTO links (url, expires_at) VALUES (?, ?)';
+   await db.run(query, [url, expiresAt]);
+FINDOUT
+  exit 0
+fi
+
+echo "Mock fcc-codex: unknown prompt type"
+exit 1

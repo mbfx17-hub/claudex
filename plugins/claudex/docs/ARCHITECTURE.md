@@ -40,11 +40,11 @@ USER: /claudex:plan add expiry dates
   │ stop-hook.sh        │ Reads state file
   └─────────────────────┘ phase=drafting + PLAN.md exists
               │           → CAS transition to reviewing
-              │           → Write runner script with Codex prompt
+              │           → Write runner script with FCC Codex prompt
               │           → Return BLOCK with "run the script"
               ▼
   CLAUDE: bash <runner-script>
-  CLAUDE reads Codex findings
+  CLAUDE reads FCC Codex findings
   CLAUDE decides: material? (revise + end turn)
                   no?       (mark-done + end turn)
               │
@@ -127,15 +127,18 @@ Review mode is simpler in v1:
 
 ## The runner script
 
-When the hook decides BLOCK, it writes a runner script to `.claude/claudex/<review_id>-runner.sh`. The script is a self-contained shell command that invokes the Codex CLI with a prompt embedded inline.
+When the hook decides BLOCK, it writes a runner script to `.claude/claudex/<review_id>-runner.sh`. The script is a self-contained shell command that invokes the FCC Codex CLI with a prompt embedded inline.
 
-The hook tells Claude in its BLOCK reason to run that runner script. Claude executes via the Bash tool. Codex output streams to the user's terminal in real time.
+**Important safety change from v1**: The runner script now captures FCC Codex's stdout and writes the findings file(s) itself. This is because FCC Codex runs with `--ephemeral --sandbox read-only`, which prevents it from writing files directly. The prompt instructs FCC Codex to output findings in a specific format to stdout, and the runner parses this output and writes the appropriate files.
+
+The hook tells Claude in its BLOCK reason to run that runner script. Claude executes via the Bash tool. FCC Codex output streams to the user's terminal in real time.
 
 The runner script includes:
 
-- A check for `codex` in PATH (clear error if missing)
-- The full prompt as a heredoc (so the Codex review focus is exactly what claudex specified)
+- A check for `fcc-codex` in PATH (clear error if missing)
+- The full prompt as a heredoc (so the FCC Codex review focus is exactly what claudex specified)
 - A clear log line so the user knows what's happening
+- Logic to capture stdout and write findings file(s) in the expected format and location
 
 ## How Claude communicates "done" back to the hook
 
@@ -150,17 +153,18 @@ This is just a state machine using the file system as a synchronization channel.
 To keep the plugin safe and predictable, the hook explicitly does not:
 
 - Edit any user code outside of `.claude/claudex/`
-- Auto-apply Codex findings (review mode is read-only in v1)
+- Auto-apply FCC Codex findings (review mode is read-only in v1)
 - Time out without allowing exit
 - Trap on missing dependencies
 - Call slash commands directly (it writes runner scripts that Claude executes)
+- Use unsafe flags like `--dangerously-bypass-approvals-and-sandbox`
 
 ## What you would change in a fork
 
 If you want to extend claudex, the natural seams are:
 
 - **Add a new mode**: branch in `commands/claudex.md` to detect a new keyword, add a new lifecycle in `stop-hook.sh`, write new prompt templates.
-- **Change the Codex invocation**: edit the `write_runner_script` function in `stop-hook.sh`. Default uses `codex --dangerously-bypass-approvals-and-sandbox`. You can swap in any other agent.
+- **Change the FCC Codex invocation**: edit the `write_runner_script` function in `stop-hook.sh`. Default uses `fcc-codex exec --ephemeral --sandbox read-only --skip-git-repo-check`. You can swap in any other agent.
 - **Change round limits**: set `CLAUDEX_MAX_PLAN_ROUNDS` and `CLAUDEX_MAX_REVIEW_ROUNDS` env vars before invoking `/claudex`.
 - **Change the stale threshold**: set `CLAUDEX_STALE_MINUTES` (default 15).
 - **Add multi-agent mode**: see `docs/V2_DESIGN.md` for sketched approach.

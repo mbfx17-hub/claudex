@@ -64,7 +64,7 @@ log "Hook fired. Input bytes: ${#HOOK_INPUT}"
 
 # Find active loop.
 ACTIVE_STATE=""
-ACTIVE_STATE=$(claudex_find_active_loop 2>/dev/null)
+ACTIVE_STATE=$(claudex_find_active_loop 2>/dev/null) || ACTIVE_STATE=""
 if [ -z "$ACTIVE_STATE" ] || [ ! -f "$ACTIVE_STATE" ]; then
   approve "no active loop"
 fi
@@ -172,16 +172,27 @@ write_runner_script() {
 
 $focus"
 
+  # Determine findings file paths based on mode and round
+  local findings_file=""
+  local proposed_fixes_file=""
+  if [ "$mode" = "plan" ]; then
+    findings_file="$REVIEW_DIR/findings-round-$round_num.md"
+  else
+    findings_file="reviews/review-$REVIEW_ID.md"
+    proposed_fixes_file="reviews/proposed-fixes-$REVIEW_ID.md"
+  fi
+
   cat > "$RUNNER" <<RUNNEREOF
 #!/usr/bin/env bash
 # Claudex runner script for $REVIEW_ID, mode=$mode, round=$round_num
 # Persona: $persona_label
-# Runs Codex against the current state. Output streams to user's terminal.
+# Runs FCC Codex against the current state. Captures stdout and writes findings file(s).
+# Failures are written as structured markers so the user can distinguish them from successful reviews.
 
 set +e
 
-if ! command -v codex >/dev/null 2>&1; then
-  echo "Error: codex CLI not found in PATH. Install with: npm install -g @openai/codex" >&2
+if ! command -v fcc-codex >/dev/null 2>&1; then
+  echo "Error: fcc-codex CLI not found in PATH. Ensure FCC Codex is installed and available." >&2
   exit 1
 fi
 
@@ -191,11 +202,101 @@ cat > "\$PROMPT_FILE" <<'PROMPTEOF'
 $full_focus
 PROMPTEOF
 
-echo "[claudex] Running Codex (mode=$mode, round=$round_num, persona: $persona_label)..."
-codex exec --dangerously-bypass-approvals-and-sandbox < "\$PROMPT_FILE"
+echo "[claudex] Running FCC Codex (mode=$mode, round=$round_num, persona: $persona_label)..."
+# FCC Codex runs with read-only sandbox. The prompt instructs Codex to output
+# findings to stdout. We capture stdout and write the findings file(s) ourselves.
+OUTPUT=\$(fcc-codex exec --ephemeral --sandbox read-only --skip-git-repo-check < "\$PROMPT_FILE" 2>&1)
 RC=\$?
-echo "[claudex] Codex exit code: \$RC"
-exit \$RC
+echo "[claudex] FCC Codex exit code: \$RC"
+
+# Write raw output for debugging (always preserved)
+RAW_OUTPUT_FILE="$findings_file.raw"
+printf '%s\n' "\$OUTPUT" > "\$RAW_OUTPUT_FILE"
+echo "[claudex] Preserved raw output to \$RAW_OUTPUT_FILE"
+
+# Helper: write a failure marker file that clearly indicates incomplete/failed review
+write_failure_marker() {
+  local findings_target="\$1"
+  local reason="\$2"
+  local rc="\$3"
+  {
+    echo "# REVIEW INCOMPLETE / FAILED"
+    echo ""
+    echo "**Reason:** \$reason"
+    echo "**Exit code:** \$rc"
+    echo "**Timestamp:** \$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo ""
+    echo "The FCC Codex review did not complete successfully. The raw output has been preserved"
+    echo "in the accompanying .raw file for debugging. Do not treat this as a valid review."
+    echo ""
+    echo "---"
+    echo ""
+    echo "## Raw output (truncated to first 200 lines)"
+    echo ""
+    head -200 "\$RAW_OUTPUT_FILE" | sed 's/^/    /'
+  } > "\$findings_target"
+}
+
+if [ "\$RC" -ne 0 ]; then
+  # Non-zero exit code: mark as failed, preserve raw output, fail-open
+  if [ "$mode" = "plan" ]; then
+    write_failure_marker "$findings_file" "FCC Codex exited with non-zero status" "\$RC"
+    echo "[claudex] FCC Codex failed (exit code \$RC). Wrote failure marker to $findings_file"
+  else
+    write_failure_marker "$findings_file" "FCC Codex exited with non-zero status" "\$RC"
+    printf '# Proposed fixes\n\nReview incomplete - FCC Codex failed (exit code %s).\n' "\$RC" > "$proposed_fixes_file"
+    echo "[claudex] FCC Codex failed (exit code \$RC). Wrote failure markers to findings and proposed-fixes files"
+  fi
+  exit 0  # Fail-open: always exit 0 so hook doesn't trap user
+fi
+
+# Exit code 0: validate output structure
+if [ "$mode" = "plan" ]; then
+  # Plan mode: expect findings format with severity sections
+  # Check for at least a header or "No substantive findings"
+  if ! printf '%s\n' "\$OUTPUT" | grep -qE '^(# Round [0-9]+ findings|No substantive findings)'; then
+    write_failure_marker "$findings_file" "Output missing expected plan findings format (no round header or 'No substantive findings')" "0"
+    echo "[claudex] Output validation failed: missing expected plan findings format"
+    exit 0  # Fail-open
+  fi
+  # Valid output - write as findings
+  printf '%s\n' "\$OUTPUT" > "$findings_file"
+  echo "[claudex] Wrote findings to $findings_file"
+else
+  # Review mode: validate both delimiters exist
+  if ! printf '%s\n' "\$OUTPUT" | grep -q '^=== FINDINGS ===$'; then
+    write_failure_marker "$findings_file" "Output missing '=== FINDINGS ===' delimiter" "0"
+    printf '# Proposed fixes\n\nReview incomplete - missing FINDINGS delimiter.\n' > "$proposed_fixes_file"
+    echo "[claudex] Output validation failed: missing FINDINGS delimiter"
+    exit 0  # Fail-open
+  fi
+  if ! printf '%s\n' "\$OUTPUT" | grep -q '^=== PROPOSED FIXES ===$'; then
+    write_failure_marker "$findings_file" "Output missing '=== PROPOSED FIXES ===' delimiter" "0"
+    printf '# Proposed fixes\n\nReview incomplete - missing PROPOSED FIXES delimiter.\n' > "$proposed_fixes_file"
+    echo "[claudex] Output validation failed: missing PROPOSED FIXES delimiter"
+    exit 0  # Fail-open
+  fi
+
+  # Both delimiters present - split and write
+  FINDINGS_PART=\$(printf '%s\n' "\$OUTPUT" | awk '/^=== PROPOSED FIXES ===$/ {exit} {print}')
+  FIXES_PART=\$(printf '%s\n' "\$OUTPUT" | awk '/^=== PROPOSED FIXES ===$/ {found=1; next} found {print}')
+
+  # Write findings (remove the "=== FINDINGS ===" header if present)
+  printf '%s\n' "\$FINDINGS_PART" | sed '/^=== FINDINGS ===$/d' > "$findings_file"
+  echo "[claudex] Wrote findings to $findings_file"
+
+  # Write proposed fixes (if any)
+  if [ -n "\$FIXES_PART" ] && [ "\$FIXES_PART" != " " ]; then
+    printf '%s\n' "\$FIXES_PART" > "$proposed_fixes_file"
+    echo "[claudex] Wrote proposed fixes to $proposed_fixes_file"
+  else
+    # Write empty file or placeholder
+    printf '# Proposed fixes\n\nNo proposed fixes.\n' > "$proposed_fixes_file"
+    echo "[claudex] Wrote empty proposed fixes to $proposed_fixes_file"
+  fi
+fi
+
+exit 0
 RUNNEREOF
   chmod +x "$RUNNER"
 }
@@ -241,11 +342,7 @@ If you find no material concerns (only style nits), say exactly: 'No substantive
 
 Read PLAN.md, then review.
 
-CRITICAL OUTPUT REQUIREMENT: After your full analysis, write a clean summary of just the findings (severity + one-line description + recommendation) to the file:
-
-  $FINDINGS_FILE
-
-Use this exact format:
+CRITICAL OUTPUT REQUIREMENT: Output your findings in the following format to stdout. The runner will capture this and write it to the findings file.
 
 # Round $ROUND findings
 
@@ -259,13 +356,11 @@ Use this exact format:
 ## Low
 - ...
 
-If no material findings, the file should contain exactly:
+If no material findings, output exactly:
 
 # Round $ROUND findings
 
-No substantive findings.
-
-Write that file before exiting. The next reviewer reads only that file, not your full transcript."
+No substantive findings."
 
       write_runner_script "plan" "$FOCUS" "$ROUND"
 
@@ -279,7 +374,7 @@ Write that file before exiting. The next reviewer reads only that file, not your
 bash $RUNNER
 \`\`\`
 
-When Codex finishes, read the clean findings summary from:
+When FCC Codex finishes, read the clean findings summary from:
 
 \`$FINDINGS_FILE\`
 
@@ -294,7 +389,7 @@ When Codex finishes, read the clean findings summary from:
   \`\`\`
   Then end your turn.
 
-**Hard stop:** if this is round $MAX_ROUNDS and Codex still has substantive findings, end your turn anyway. The hook will detect max-rounds-reached and exit cleanly with a summary of what's left."
+**Hard stop:** if this is round $MAX_ROUNDS and FCC Codex still has substantive findings, end your turn anyway. The hook will detect max-rounds-reached and exit cleanly with a summary of what's left."
 
       block "$MSG"
       ;;
@@ -314,7 +409,7 @@ When Codex finishes, read the clean findings summary from:
 
         SUMMARY="### Claudex plan loop complete ✓
 
-The plan at \`PLAN.md\` is locked. Codex had no substantive findings on the final round.
+The plan at \`PLAN.md\` is locked. FCC Codex had no substantive findings on the final round.
 
 **Rounds run:** $ROUND of $MAX_ROUNDS
 **Total time:** $ELAPSED
@@ -398,11 +493,7 @@ If you find no material concerns (only style nits), say exactly: 'No substantive
 
 Read PLAN.md, then review.
 
-CRITICAL OUTPUT REQUIREMENT: After your full analysis, write a clean summary of just the findings (severity + one-line description + recommendation) to the file:
-
-  $FINDINGS_FILE
-
-Use this exact format:
+CRITICAL OUTPUT REQUIREMENT: Output your findings in the following format to stdout. The runner will capture this and write it to the findings file.
 
 # Round $ROUND findings
 
@@ -416,13 +507,11 @@ Use this exact format:
 ## Low
 - ...
 
-If no material findings, the file should contain exactly:
+If no material findings, output exactly:
 
 # Round $ROUND findings
 
-No substantive findings.
-
-Write that file before exiting."
+No substantive findings."
 
       write_runner_script "plan" "$FOCUS" "$ROUND"
 
@@ -495,7 +584,7 @@ fi
 if [ "$MODE" = "review" ]; then
   case "$PHASE" in
     reviewing)
-      # First fire after /claudex:review. Run codex review on diff.
+      # First fire after /claudex:review. Run fcc-codex review on diff.
       mkdir -p reviews 2>/dev/null
 
       FOCUS="You are doing a code review of the current git diff (uncommitted changes plus the diff against the base branch if one is configured).
@@ -515,7 +604,33 @@ For each material finding:
 
 Skip style nits. Material findings only.
 
-Output as a markdown document. Save the findings to reviews/review-$REVIEW_ID.md and proposed fixes (unified diff format) to reviews/proposed-fixes-$REVIEW_ID.md."
+CRITICAL OUTPUT REQUIREMENT: Output your findings AND proposed fixes in the following format to stdout. The runner will capture this and write the two files.
+
+=== FINDINGS ===
+
+# Review findings
+
+## High
+- <file:line> <one-line description> (<recommendation>)
+- ...
+
+## Medium
+- ...
+
+## Low
+- ...
+
+If no material findings, output exactly:
+
+=== FINDINGS ===
+
+# Review findings
+
+No substantive findings.
+
+=== PROPOSED FIXES ===
+
+<unified diff format patches, or empty if no fixes>"
 
       write_runner_script "review" "$FOCUS" "1"
 
@@ -529,13 +644,13 @@ Output as a markdown document. Save the findings to reviews/review-$REVIEW_ID.md
 bash $RUNNER
 \`\`\`
 
-Codex will write:
+FCC Codex will output findings and proposed fixes to stdout. The runner will write:
 - Findings → \`reviews/review-$REVIEW_ID.md\`
 - Proposed fixes → \`reviews/proposed-fixes-$REVIEW_ID.md\`
 
 **Note:** claudex v1 review mode is READ-ONLY. It will NOT auto-apply patches. Review the findings yourself, then apply fixes manually.
 
-After Codex finishes, end your turn. The hook will allow exit."
+After FCC Codex finishes, end your turn. The hook will allow exit."
 
       block "$MSG"
       ;;

@@ -1,8 +1,8 @@
 # Claudex V2 Design (Auto-Apply Review Mode)
 
-This document describes the design for v2 of claudex review mode. v2 adds the ability to auto-apply Codex's recommended fixes safely. v1 is read-only and produces a proposed-fixes file that the user applies manually.
+This document describes the design for v2 of claudex review mode. v2 adds the ability to auto-apply FCC Codex's recommended fixes safely. v1 is read-only and produces a proposed-fixes file that the user applies manually.
 
-The reason auto-apply was deferred: a Codex adversarial review of the v1 plan flagged that auto-applying patches without branch isolation is dangerous. Bad findings, retries, partial failures, or a user's dirty worktree can mix automated edits with unrelated user changes irreversibly. v2 fixes this by making auto-apply only operate on an isolated branch that the user explicitly merges or discards.
+The reason auto-apply was deferred: an FCC Codex adversarial review of the v1 plan flagged that auto-applying patches without branch isolation is dangerous. Bad findings, retries, partial failures, or a user's dirty worktree can mix automated edits with unrelated user changes irreversibly. v2 fixes this by making auto-apply only operate on an isolated branch that the user explicitly merges or discards.
 
 ## v2 lifecycle
 
@@ -20,7 +20,7 @@ USER: /claudex:review --apply
   Create branch: claudex/review-<review_id>
               │
               ▼
-  Codex reviews HEAD diff (unchanged from v1)
+  FCC Codex reviews HEAD diff (unchanged from v1)
               │
               ▼
   Findings + proposed-fixes files written
@@ -86,7 +86,7 @@ snapshot_dir: .claude/claudex/20260426-094523-a3f7c2-snapshots
 
 - **Phase v2.1**. Branch isolation and commit-per-fix on the isolated branch (no merge support yet)
 - **Phase v2.2**. `/claudex:apply` and `/claudex:rollback` commands
-- **Phase v2.3**. Multi-agent Codex (parallel reviewers) opt-in
+- **Phase v2.3**. Multi-agent FCC Codex (parallel reviewers) opt-in
 - **Phase v2.4**. Interactive apply (let the user pick which fixes to apply)
 
 ## What v2 does NOT add

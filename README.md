@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Two AIs argue about your plan so you don't have to.</strong><br/>
-  Claude turns your one-line idea into a detailed plan. Codex (a different AI) grills it from three different angles. Claude revises. They keep going until there's nothing left to fix. You watch from one terminal window.
+  Claude turns your one-line idea into a detailed plan. FCC Codex (a different AI, routed through FCC) grills it from three different angles. Claude revises. They keep going until there's nothing left to fix. You watch from one terminal window.
 </p>
 
 <p align="center">
@@ -58,11 +58,11 @@ $ /claudex:plan add expiry dates to my links
     → Just launch the loop
 
   Round 1 of 3, Senior-engineer review
-        Codex: 5 findings (2 high, 3 medium)
+        FCC Codex: 5 findings (2 high, 3 medium)
   Round 2 of 3, Security and data-integrity review
-        Codex: 1 high, 1 low
+        FCC Codex: 1 high, 1 low
   Round 3 of 3, Ops and SRE review
-        Codex: no substantive findings
+        FCC Codex: no substantive findings
   LGTM. Plan locked.
 
   Plan: PLAN.md
@@ -77,12 +77,12 @@ That's claudex.
 
 ## Under the hood
 
-Two slash commands wired through a Claude Code Stop hook, plus four utility commands. The Stop hook is the only mechanism in Claude Code that can force an autonomous loop. Claudex uses it to drive Claude and Codex back and forth until the work is done.
+Two slash commands wired through a Claude Code Stop hook, plus four utility commands. The Stop hook is the only mechanism in Claude Code that can force an autonomous loop. Claudex uses it to drive Claude and FCC Codex back and forth until the work is done.
 
 | Command | Mode | Behavior |
 |---|---|---|
-| `/claudex:plan [flags] <feature>` | Plan mode | Optionally interviews you to sharpen the topic, then Claude drafts `PLAN.md`, Codex pressure-tests it, Claude revises. Each round uses a different reviewer persona. Loops until LGTM or N rounds. |
-| `/claudex:review` | Review mode | Codex reviews the diff. Findings + proposed fixes written to `reviews/`. **Read-only in v1.** |
+| `/claudex:plan [flags] <feature>` | Plan mode | Optionally interviews you to sharpen the topic, then Claude drafts `PLAN.md`, FCC Codex pressure-tests it, Claude revises. Each round uses a different reviewer persona. Loops until LGTM or N rounds. |
+| `/claudex:review` | Review mode | FCC Codex reviews the diff. Findings + proposed fixes written to `reviews/`. **Read-only in v1.** |
 | `/claudex:status` | utility | Print the current loop's mode, phase, round, elapsed time, and per-round severity tallies. Read-only. |
 | `/claudex:doctor` | utility | Preflight diagnostic. Verifies bash, codex CLI, plugin file integrity, hook fail-open. Run after install. |
 | `/claudex:cancel` | utility | Graceful cancel of the active loop. |
@@ -126,11 +126,20 @@ Before installing claudex, you need:
 | Requirement | Why | How to get it |
 |---|---|---|
 | **Claude Code** | Where claudex runs | https://docs.claude.com/en/docs/claude-code |
-| **Node.js 18.18+** | Codex CLI is a Node app | https://nodejs.org/ or use `nvm` |
-| **Codex CLI** | claudex calls `codex exec` directly | `npm install -g @openai/codex` |
-| **ChatGPT Plus or higher** | Codex authenticates against your ChatGPT account | https://chatgpt.com/ |
+| **Node.js 18.18+** | FCC Codex CLI is a Node app | https://nodejs.org/ or use `nvm` |
+| **FCC Codex CLI** | claudex calls `fcc-codex exec` directly | Install FCC Codex CLI (see install.sh) |
+| **FCC account with Codex access** | FCC Codex authenticates against your FCC account | FCC portal |
 | **Bash** | Hooks and scripts are bash | Built into macOS and Linux. Windows needs WSL. |
-| **`codex login`** | Authenticates the Codex CLI | Run `codex login` after install (opens a browser) |
+
+### About FCC Codex
+
+FCC Codex is an external wrapper/provider setup that routes Codex execution through the FCC (Foundation Compute Cluster) infrastructure. It is **not** the official OpenAI Codex authentication flow. Key differences:
+
+- Uses `fcc-codex` command instead of `codex`
+- Runs with `--ephemeral --sandbox read-only` flags for safety
+- Does **not** use `codex login` or ChatGPT credentials
+- Review runs are read-only (sandbox prevents file modifications)
+- No `--dangerously-bypass-approvals-and-sandbox` flag is ever used
 
 ### Recommended companion (not required)
 
@@ -145,7 +154,7 @@ To install:
 /codex:setup
 ```
 
-claudex works without it (we invoke `codex` CLI directly), but pairing them is the full experience.
+claudex works without it (we invoke `fcc-codex` CLI directly), but pairing them is the full experience.
 
 ## Install
 
@@ -195,7 +204,7 @@ In a Claude Code session inside any git project:
 /claudex:plan add a feature flag system to this app
 ```
 
-Pick "Interview me first" when prompted, answer three short questions, and watch the loop. Claude drafts `PLAN.md`. The Stop hook fires when Claude tries to finish the turn. The hook writes a runner script that calls Codex with the round-1 senior-engineer prompt. Claude executes the script, reads Codex's findings, and either revises `PLAN.md` (if there are material findings) or marks the loop done.
+Pick "Interview me first" when prompted, answer three short questions, and watch the loop. Claude drafts `PLAN.md`. The Stop hook fires when Claude tries to finish the turn. The hook writes a runner script that calls FCC Codex with the round-1 senior-engineer prompt. Claude executes the script, reads FCC Codex's findings, and either revises `PLAN.md` (if there are material findings) or marks the loop done.
 
 You watch all of it happen in one Claude Code window.
 
@@ -210,7 +219,7 @@ Claude drafts PLAN.md, tries to finish turn
    ↓
 Stop hook fires → BLOCK with "run the runner script"
    ↓
-Claude runs the runner → Codex returns adversarial findings (round-N persona)
+Claude runs the runner → FCC Codex returns adversarial findings (round-N persona)
    ↓
 Claude reads findings: revise PLAN.md OR call mark-done
    ↓
@@ -235,7 +244,7 @@ The Stop hook is fail-open everywhere. Any error returns `{"decision":"approve"}
 
 ## Cost expectation
 
-Each plan-mode round is one full Codex review of `PLAN.md`. In practice that's ~25–30k Codex tokens per round. With the default 3 rounds you should expect **~75–90k tokens per `/claudex:plan`**. Codex authenticates against your ChatGPT account, so the bill goes to your ChatGPT Plus / Pro / Team / Enterprise plan, not to claudex. If you're on a tight rate limit, run `--rounds 2` for fast topics and reserve `--rounds 5+` for high-stakes designs.
+Each plan-mode round is one full FCC Codex review of `PLAN.md`. In practice that's ~25–30k FCC Codex tokens per round. With the default 3 rounds you should expect **~75–90k tokens per `/claudex:plan`**. FCC Codex authenticates against your FCC account, so the bill goes to your FCC plan, not to claudex. If you're on a tight rate limit, run `--rounds 2` for fast topics and reserve `--rounds 5+` for high-stakes designs.
 
 ## Safety
 
@@ -263,10 +272,10 @@ Highlights:
 # Phase 0: confirm platform behaviors work on your machine (50 checks)
 bash plugins/claudex/tests/platform-validation.sh
 
-# Smoke test: simulate full lifecycle without invoking Codex (60 checks)
+# Smoke test: simulate full lifecycle without invoking FCC Codex (60 checks)
 bash plugins/claudex/tests/smoke-test.sh
 
-# Synthetic E2E: real Codex calls against a throwaway repo (19 checks, costs a few cents in tokens)
+# Synthetic E2E: mocked FCC Codex calls against a throwaway repo (19 checks, no live API calls)
 bash plugins/claudex/tests/synthetic-e2e.sh
 ```
 
@@ -312,14 +321,14 @@ claudex/
 **`/claudex` doesn't show up in my slash command list.**
 You either skipped `/reload-plugins` after dropping the plugin in, or the plugin folder isn't where Claude Code expects it. Confirm `.claude/plugins/claudex/.claude-plugin/plugin.json` exists. Then run `/reload-plugins`.
 
-**`codex exec` errors out with "auth required" or similar.**
-Run `codex login` in a regular terminal. It opens a browser. Sign in with your ChatGPT account (Plus or higher).
+**`fcc-codex exec` errors out with "auth required" or similar.**
+Ensure your FCC Codex CLI is configured with valid FCC credentials. FCC Codex does not use `codex login` or ChatGPT credentials.
 
 **`/claudex:doctor` flags something red.**
-Doctor names the failing check explicitly. Common ones: `codex` not in PATH (install the CLI), state directory not writable (check permissions), plugin file missing (re-clone or `/reload-plugins`).
+Doctor names the failing check explicitly. Common ones: `fcc-codex` not in PATH (install the FCC Codex CLI), state directory not writable (check permissions), plugin file missing (re-clone or `/reload-plugins`).
 
 **The hook fires but Claude doesn't continue the loop.**
-Check `.claude/claudex/log` for ERR-trap entries. Most likely cause: the runner script printed an error from the Codex CLI. Run `bash .claude/claudex/<id>-runner.sh` manually to see what Codex said.
+Check `.claude/claudex/log` for ERR-trap entries. Most likely cause: the runner script printed an error from the FCC Codex CLI. Run `bash .claude/claudex/<id>-runner.sh` manually to see what FCC Codex said.
 
 **A loop is stuck and `/claudex:cancel` didn't help.**
 Use `/claudex:rollback` to nuke all state files. Then start a fresh loop.
